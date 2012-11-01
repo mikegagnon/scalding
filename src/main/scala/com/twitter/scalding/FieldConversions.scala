@@ -57,7 +57,10 @@ trait LowPriorityFieldConversions {
   implicit def productToFields( f : Product ) = {
     val fields = new Fields(f.productIterator.map { anyToFieldArg }.toSeq :_* )
     f.productIterator.foreach { _ match {
-      case field: Field[_] => fields.setComparator(field.id, field.ord)
+      case field: Field[_] => {
+        if (field.ord == null) throw new NullPointerException("field.ord is null")
+        fields.setComparator(field.id, field.ord)
+      }
       case _ =>
     }}
     fields
@@ -192,7 +195,10 @@ trait FieldConversions extends LowPriorityFieldConversions {
   implicit def parseAnySeqToFields[T <: TraversableOnce[Any]](anyf : T) = {
     val fields = new Fields(anyf.toSeq.map { anyToFieldArg } : _* )
     anyf.foreach { _ match {
-      case field: Field[_] => fields.setComparator(field.id, field.ord)
+      case field: Field[_] => {
+        if (field.ord == null) throw new NullPointerException("field.ord is null")
+        fields.setComparator(field.id, field.ord)
+      }
       case _ =>
     }}
     fields
@@ -248,7 +254,10 @@ trait FieldConversions extends LowPriorityFieldConversions {
 
 class RichFields(f : Traversable[Field[_]]) extends Fields(f.toSeq.map(_.id) : _*) {
 
-  f.foreach { field: Field[_] => setComparator(field.id, field.ord) }
+  f.foreach { field: Field[_] =>
+    if (field.ord == null) throw new NullPointerException("field.ord is null")
+    setComparator(field.id, field.ord)
+  }
 
   lazy val toFieldList: List[Field[_]] = f.toList
 
