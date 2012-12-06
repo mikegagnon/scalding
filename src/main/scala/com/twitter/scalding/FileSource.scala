@@ -32,6 +32,8 @@ import cascading.tap.Tap
 import cascading.tap.local.FileTap
 import cascading.tuple.{Tuple, TupleEntry, TupleEntryIterator, Fields}
 
+import com.etsy.cascading.tap.local.LocalTap
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.fs.Path
@@ -43,6 +45,8 @@ import org.apache.commons.lang.StringEscapeUtils
 
 import collection.mutable.{Buffer, MutableList}
 import scala.collection.JavaConverters._
+
+import com.codahale.jerkson.Json
 
 /**
 * This is a base class for File-based sources
@@ -171,11 +175,13 @@ trait DelimitedScheme extends Source {
   val separator = "\t"
   val skipHeader = false
   val writeHeader = false
+  val quote : String = null
   //These should not be changed:
-  override def localScheme = new CLTextDelimited(fields, skipHeader, writeHeader, separator, types)
+  override def localScheme = new CLTextDelimited(fields, skipHeader, writeHeader, separator, quote, types)
 
-  override def hdfsScheme =
-    HadoopSchemeInstance(new CHTextDelimited(fields, skipHeader, writeHeader, separator, types))
+  override def hdfsScheme = {
+    HadoopSchemeInstance(new CHTextDelimited(fields, skipHeader, writeHeader, separator, quote, types))
+  }
 }
 
 trait SequenceFileScheme extends Source {
@@ -215,6 +221,10 @@ trait SuccessFileSource extends FileSource {
   }
 }
 
+trait LocalTapSource extends FileSource {
+  override def createLocalTap(sinkMode : SinkMode) = new LocalTap(localPath, hdfsScheme, sinkMode).asInstanceOf[Tap[_, _, _]]
+}
+
 abstract class FixedPathSource(path : String*) extends FileSource {
   def localPath = { assert(path.size == 1); path(0) }
   def hdfsPaths = path.toList
@@ -227,6 +237,17 @@ abstract class FixedPathSource(path : String*) extends FileSource {
 case class Tsv(p : String, override val fields : Fields = Fields.ALL,
   override val skipHeader : Boolean = false, override val writeHeader: Boolean = false) extends FixedPathSource(p)
   with DelimitedScheme
+
+/**
+* Csv value source
+* separated by commas and quotes wrapping all fields
+*/
+case class Csv(p : String,
+                override val separator : String = ",",
+                override val fields : Fields = Fields.ALL,
+                override val skipHeader : Boolean = false,
+                override val writeHeader : Boolean = false,
+                override val quote : String ="\"") extends FixedPathSource(p) with DelimitedScheme
 
 /** Allows you to set the types, prefer this:
  * If T is a subclass of Product, we assume it is a tuple. If it is not, wrap T in a Tuple1:
@@ -379,7 +400,7 @@ abstract class MostRecentGoodSource(p : String, dr : DateRange, t : TimeZone)
 
 case class TextLine(p : String) extends FixedPathSource(p) with TextLineScheme
 
-case class SequenceFile(p : String, f : Fields = Fields.ALL) extends FixedPathSource(p) with SequenceFileScheme {
+case class SequenceFile(p : String, f : Fields = Fields.ALL) extends FixedPathSource(p) with SequenceFileScheme with LocalTapSource {
   override val fields = f
 }
 
@@ -402,24 +423,8 @@ case class WritableSequenceFile[K <: Writable : Manifest, V <: Writable : Manife
 case class JsonLine(p : String) extends FixedPathSource(p) with TextLineScheme {
   import Dsl._
 
-  def writeJSString(sb : StringBuffer, s : String) {
-    sb.append("\"")
-    sb.append(StringEscapeUtils.escapeJavaScript(s))
-    sb.append("\"")
-  }
-
   override def transformForWrite(pipe : Pipe) = pipe.mapTo(Fields.ALL -> 'json) {
     t : TupleEntry =>
-    val sb = new StringBuffer
-    sb.append("{")
-    t.getFields.iterator.asScala.foreach { f =>
-      writeJSString(sb, f.toString)
-      sb.append(":")
-      writeJSString(sb, t.getString(f.toString))
-      sb.append(",")
-    }
-    sb.delete(sb.length-1, sb.length)
-    sb.append("}")
-    sb.toString
+    Json.generate(t.getFields.asScala.map(f => f.toString -> t.getString(f.toString)).toMap)
   }
 }

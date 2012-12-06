@@ -26,7 +26,7 @@ import Dsl._ //Get the conversion implicits
  * We use the f-bounded polymorphism trick to return the type called Self
  * in each operation.
  */
-trait StreamOperations[Self <: StreamOperations[Self]] extends Sortable[Self] with java.io.Serializable {
+trait StreamOperations[+Self <: StreamOperations[Self]] extends Sortable[Self] with java.io.Serializable {
   /** Corresponds to a Cascading Buffer
    * which allows you to stream through the data, keeping some, dropping, scanning, etc...
    * The iterator you are passed is lazy, and mapping will not trigger the
@@ -73,7 +73,7 @@ trait StreamOperations[Self <: StreamOperations[Self]] extends Sortable[Self] wi
       new ScanLeftIterator(s, init, fn)
     }(conv,setter)
   }
-  
+
   /**
    * Only keep the first cnt elements
    */
@@ -82,10 +82,10 @@ trait StreamOperations[Self <: StreamOperations[Self]] extends Sortable[Self] wi
       s.take(cnt)
     }(CTupleConverter, CascadingTupleSetter)
   }
-  
+
   /**
-   * Take while the predicate is true, starting at the
-   * first false, output all
+   * Take while the predicate is true, stopping at the
+   * first false. Output all taken elements.
    */
   def takeWhile[T](f : Fields)(fn : (T) => Boolean)(implicit conv : TupleConverter[T]) : Self = {
     mapStream[TupleEntry,CTuple](f -> Fields.ARGS){ s =>
