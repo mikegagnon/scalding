@@ -115,6 +115,36 @@ class MapToGroupBySizeSumMaxTest extends Specification with TupleConversions {
   }
 }
 
+class PartitionJob(args: Args) extends Job(args) {
+  Tsv("input", new Fields("age", "weight"))
+    .partition('age -> 'isAdult) { (_:Int) > 18 } { _.average('weight) }
+    .project('isAdult, 'weight)
+    .write(Tsv("output"))
+}
+
+class PartitionJobTest extends Specification with TupleConversions {
+  noDetailedDiffs()
+  "A PartitionJob" should {
+    val input = List((3, 23),(23,154),(15,123),(53,143),(7,85),(19,195),
+      (42,187),(35,165),(68,121),(13,103),(17,173),(2,13))
+
+    val (adults, minors) = input.partition { case (age, _) => age > 18 }
+    val Seq(adultWeights, minorWeights) = Seq(adults, minors).map { list =>
+      list.map { case (_, weight) => weight }
+    }
+    val expectedOutput = Map(
+      true -> adultWeights.sum / adultWeights.size.toDouble,
+      false -> minorWeights.sum / minorWeights.size.toDouble
+    )
+    JobTest(new com.twitter.scalding.PartitionJob(_))
+      .source(Tsv("input", new Fields("age", "weight")), input)
+      .sink[(Boolean,Double)](Tsv("output")) { outBuf =>
+        outBuf.toMap must be_==(expectedOutput)
+      }
+      .run.finish
+  }
+}
+
 class MRMJob(args : Args) extends Job(args) {
   val in = Tsv("input").read.mapTo((0,1) -> ('x,'y)) { xy : (Int,Int) => xy }
    // XOR reduction (insane, I guess:
@@ -695,15 +725,15 @@ class ForceReducersTest extends Specification with TupleConversions {
 class ToListJob(args : Args) extends Job(args) {
   TextLine(args("in")).read
     .flatMap('line -> 'words){l : String => l.split(" ")}
-    .groupBy('num){ _.toList[String]('words -> 'wordList) }
+    .groupBy('offset){ _.toList[String]('words -> 'wordList) }
     .map('wordList -> 'wordList){w : List[String] => w.mkString(" ")}
-    .project('num, 'wordList)
+    .project('offset, 'wordList)
     .write(Tsv(args("out")))
 }
 
 class NullListJob(args : Args) extends Job(args) {
   TextLine(args("in")).read
-    .groupBy('num){ _.toList[String]('line -> 'lineList).spillThreshold(100) }
+    .groupBy('offset){ _.toList[String]('line -> 'lineList).spillThreshold(100) }
     .map('lineList -> 'lineList) { ll : List[String] => ll.mkString(" ") }
     .write(Tsv(args("out")))
 }
@@ -1072,6 +1102,29 @@ class MkStringToListTest extends Specification with TupleConversions with FieldC
       }
       .run
       // This can't be run in Hadoop mode because we can't serialize the list to Tsv
+      .finish
+  }
+}
+
+class InsertJob(args : Args) extends Job(args) {
+  Tsv("input", ('x, 'y)).insert('z, 1).write(Tsv("output"))
+}
+
+class InsertJobTest extends Specification {
+  import Dsl._
+  noDetailedDiffs()
+
+  val input = List((2,2), (3,3))
+
+  "An InsertJob" should {
+    JobTest("com.twitter.scalding.InsertJob")
+      .source(Tsv("input", ('x, 'y)), input)
+      .sink[(Int, Int, Int)](Tsv("output")) { outBuf =>
+        "Correctly insert a constant" in {
+          outBuf.toSet must be_==(Set((2,2,1), (3,3,1)))
+        }
+      }
+      .run
       .finish
   }
 }

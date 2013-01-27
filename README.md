@@ -4,7 +4,7 @@ Scalding is a Scala library that makes it easy to write MapReduce jobs in Hadoop
 
 Scalding is built on top of [Cascading](http://www.cascading.org/), a Java library that abstracts away much of the complexity of Hadoop.
 
-Current version: 0.8.1
+Current version: 0.8.2
 
 ## Word Count
 
@@ -48,10 +48,14 @@ You can find more example code under [examples/](https://github.com/twitter/scal
 2. ```sbt test```
 3. ```sbt assembly``` (needed to make the jar used by the scald.rb script)
 
+The test suite takes a while to run. When you're in sbt, here's a shortcut to run just one test:
+
+```> test-only com.twitter.scalding.FileSourceTest```
+
 We use [Travis CI](http://travis-ci.org/) to verify the build:
 [![Build Status](https://secure.travis-ci.org/twitter/scalding.png)](http://travis-ci.org/twitter/scalding)
 
-The current version is 0.8.1 and is available from maven central: org="com.twitter", artifact="scalding_2.9.2".
+The current version is 0.8.2 and is available from maven central: org="com.twitter", artifact="scalding_2.9.2".
 
 ## Contact
 
